@@ -1,0 +1,8 @@
+services:
+  discord-music-bot:
+    build: .
+    image: discord-music-bot:latest
+    container_name: discord-music-bot
+    restart: unless-stopped
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
