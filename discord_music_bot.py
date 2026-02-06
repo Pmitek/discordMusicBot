@@ -47,7 +47,20 @@ ytdl_opts: dict = {
     "skip_download": True,
     # Reduce network flakiness and speed up extraction
     "source_address": "0.0.0.0",
+    # Newer player client combo tends to work better for age/region blocks
+    "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
 }
+
+# Optional auth/cookies: set env YTDL_COOKIES=/path/to/cookies.txt or
+# YTDL_BROWSER=chrome|firefox|brave (uses yt-dlp cookiesfrombrowser)
+cookiefile = os.getenv("YTDL_COOKIES") or os.getenv("COOKIES_TXT")
+if cookiefile:
+    ytdl_opts["cookiefile"] = cookiefile
+
+browser = os.getenv("YTDL_BROWSER")
+if browser:
+    # (browser, profile, keyring, container) — only browser is required
+    ytdl_opts["cookiesfrombrowser"] = (browser, None, None, None)
 
 # Input-side options: reconnect for HTTP/HLS etc.
 FFMPEG_BEFORE_BASE: List[str] = [
