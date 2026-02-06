@@ -37,7 +37,7 @@ logging.basicConfig(
 log = logging.getLogger("music-bot")
 
 # --------------------------- yt-dlp / FFmpeg opts --------------------
-ytdl_opts: dict = {
+YTDL_BASE_OPTS: dict = {
     # Prefer audio-only formats; fallback to best.
     "format": "bestaudio[acodec!=none]/bestaudio/best",
     "noplaylist": True,
@@ -51,16 +51,25 @@ ytdl_opts: dict = {
     "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
 }
 
-# Optional auth/cookies: set env YTDL_COOKIES=/path/to/cookies.txt or
-# YTDL_BROWSER=chrome|firefox|brave (uses yt-dlp cookiesfrombrowser)
-cookiefile = os.getenv("YTDL_COOKIES") or os.getenv("COOKIES_TXT")
-if cookiefile:
-    ytdl_opts["cookiefile"] = cookiefile
 
-browser = os.getenv("YTDL_BROWSER")
-if browser:
-    # (browser, profile, keyring, container) — only browser is required
-    ytdl_opts["cookiesfrombrowser"] = (browser, None, None, None)
+def build_ytdl_opts(with_cookies: bool) -> dict:
+    opts = dict(YTDL_BASE_OPTS)
+    if not with_cookies:
+        return opts
+
+    # Optional auth/cookies:
+    # - YTDL_COOKIES=/path/to/cookies.txt (Netscape format)
+    # - YTDL_BROWSER=chrome|firefox|brave (uses cookiesfrombrowser)
+    cookiefile = os.getenv("YTDL_COOKIES") or os.getenv("COOKIES_TXT")
+    if cookiefile:
+        opts["cookiefile"] = cookiefile
+
+    browser = os.getenv("YTDL_BROWSER")
+    if browser:
+        # (browser, profile, keyring, container) — only browser is required
+        opts["cookiesfrombrowser"] = (browser, None, None, None)
+
+    return opts
 
 # Input-side options: reconnect for HTTP/HLS etc.
 FFMPEG_BEFORE_BASE: List[str] = [
@@ -95,7 +104,17 @@ class Track:
 
 # --------------------------- YTDL Helper -----------------------------
 class YTDL:
-    _ytdl = yt_dlp.YoutubeDL(ytdl_opts)
+    _ytdl_with_cookies = yt_dlp.YoutubeDL(build_ytdl_opts(with_cookies=True))
+    _ytdl_no_cookies = yt_dlp.YoutubeDL(build_ytdl_opts(with_cookies=False))
+
+    @classmethod
+    def _is_cookie_error(cls, e: Exception) -> bool:
+        msg = str(e).lower()
+        return (
+            "failed to load cookies" in msg
+            or "cookies database" in msg
+            or "cookie" in msg and "could not find" in msg
+        )
 
     @classmethod
     def _pick_first_entry(cls, info: dict) -> dict:
@@ -111,7 +130,19 @@ class YTDL:
     async def extract_meta(cls, query: str) -> Track:
         """Resolve metadata (title/webpage_url/duration). Does NOT return stream URL."""
         loop = asyncio.get_running_loop()
-        info = await loop.run_in_executor(None, lambda: cls._ytdl.extract_info(query, download=False))
+        try:
+            info = await loop.run_in_executor(
+                None, lambda: cls._ytdl_with_cookies.extract_info(query, download=False)
+            )
+        except Exception as e:
+            if cls._is_cookie_error(e):
+                log.warning("Cookies load failed; retrying extraction without cookies (%s)", e)
+                info = await loop.run_in_executor(
+                    None, lambda: cls._ytdl_no_cookies.extract_info(query, download=False)
+                )
+            else:
+                raise
+
         info = cls._pick_first_entry(info)
 
         title = info.get("title") or "Unknown title"
@@ -123,7 +154,19 @@ class YTDL:
     async def resolve_stream(cls, webpage_url: str) -> tuple[str, dict]:
         """Resolve a fresh signed stream URL + HTTP headers. Call right before playback."""
         loop = asyncio.get_running_loop()
-        info = await loop.run_in_executor(None, lambda: cls._ytdl.extract_info(webpage_url, download=False))
+        try:
+            info = await loop.run_in_executor(
+                None, lambda: cls._ytdl_with_cookies.extract_info(webpage_url, download=False)
+            )
+        except Exception as e:
+            if cls._is_cookie_error(e):
+                log.warning("Cookies load failed; retrying stream resolve without cookies (%s)", e)
+                info = await loop.run_in_executor(
+                    None, lambda: cls._ytdl_no_cookies.extract_info(webpage_url, download=False)
+                )
+            else:
+                raise
+
         info = cls._pick_first_entry(info)
 
         stream_url = info.get("url")

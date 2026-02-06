@@ -6,4 +6,7 @@ services:
     restart: unless-stopped
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - YTDL_BROWSER=chrome
+      # Optional YouTube cookies (recommended in Docker; don't commit cookies.txt):
+      - YTDL_COOKIES=/cookies/cookies.txt
+    volumes:
+      - ./cookies.txt:/cookies/cookies.txt:ro
