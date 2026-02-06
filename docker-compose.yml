@@ -9,4 +9,4 @@ services:
       # Optional YouTube cookies (recommended in Docker; don't commit cookies.txt):
       - YTDL_COOKIES=/cookies/cookies.txt
     volumes:
-      - ./cookies.txt:/cookies/cookies.txt:ro
+      - /home/pit/projects/discordMusicBot/cookies:/cookies/:ro
