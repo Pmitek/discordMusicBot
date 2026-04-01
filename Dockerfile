@@ -15,9 +15,8 @@ WORKDIR /app
 
 # Install Python deps (include voice requirements)
 RUN pip install --no-cache-dir \
-      "discord.py~=2.4" \
-      "yt-dlp>=2024.12.13" \
-      "PyNaCl>=1.5"
+      "discord.py[voice]~=2.4" \
+      "yt-dlp>=2024.12.13"
 
 # Create non-root user
 RUN useradd -u 10001 -m botuser
